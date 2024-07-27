@@ -1,17 +1,13 @@
 #include "transitions/mutex/MCMutexLock.h"
 #include "transitions/mutex/MCMutexUnlock.h"
+#include "transitions/mutex/MCMutexTryLock.h"
 #include "transitions/threads/MCThreadCreate.h"
-#include "mcmini_private.h" /* For trace_pid, and state */
-#include <pthread.h>
-#include <string.h>
-#include <memory>
-#include <sys/uio.h> /* For process_vm_readv() */
+#include "mcmini_private.h"
 
 MCTransition *
-MCReadMutexLockRaw(const MCSharedTransition *shmTransition,
-                void *shmData, MCStack *state)
-{
-  auto mutexInShm = static_cast<MCMutexShadow *>(shmData);
+MCReadMutexTryLock(const MCSharedTransition *shmTransition,
+                void *shmData, MCStack *state) {
+    auto mutexInShm = static_cast<MCMutexShadow *>(shmData);
 
   auto mutexThatExists =
     state->getVisibleObjectWithSystemIdentity<MCMutex>(
@@ -90,75 +86,56 @@ MCReadMutexLockRaw(const MCSharedTransition *shmTransition,
 
   tid_t threadThatRanId = shmTransition->executor;
   auto threadThatRan    = state->getThreadWithId(threadThatRanId);
-  return new MCMutexLock(threadThatRan, mutexThatExists);
-}
-
-MCTransition *
-MCReadMutexLock(const MCSharedTransition *shmTransition,
-                void *shmData, MCStack *state) {
-  return MCReadMutexLockRaw(shmTransition, shmData, state);
+  return new MCMutexTryLock(threadThatRan, mutexThatExists);
 }
 
 std::shared_ptr<MCTransition>
-MCMutexLock::staticCopy() const
+MCMutexTryLock::staticCopy() const
 {
   auto threadCpy =
     std::static_pointer_cast<MCThread, MCVisibleObject>(
       this->thread->copy());
   auto mutexCpy = std::static_pointer_cast<MCMutex, MCVisibleObject>(
     this->mutex->copy());
-  return std::make_shared<MCMutexLock>(threadCpy, mutexCpy);
+  return std::make_shared<MCMutexTryLock>(threadCpy, mutexCpy);
 }
 
 std::shared_ptr<MCTransition>
-MCMutexLock::dynamicCopyInState(const MCStack *state) const
+MCMutexTryLock::dynamicCopyInState(const MCStack *state) const
 {
   std::shared_ptr<MCThread> threadInState =
     state->getThreadWithId(thread->tid);
   std::shared_ptr<MCMutex> mutexInState =
     state->getObjectWithId<MCMutex>(mutex->getObjectId());
-  return std::make_shared<MCMutexLock>(threadInState, mutexInState);
+  return std::make_shared<MCMutexTryLock>(threadInState, mutexInState);
 }
 
 void
-MCMutexLock::applyToState(MCStack *state)
+MCMutexTryLock::applyToState(MCStack *state)
 {
   this->mutex->lock(this->getThreadId());
 }
 
 void
-MCMutexLock::unapplyToState(MCStack *state)
+MCMutexTryLock::unapplyToState(MCStack *state)
 {
   this->mutex->unlock();
 }
 
 bool
-MCMutexLock::isReversibleInState(const MCStack *state) const
+MCMutexTryLock::isReversibleInState(const MCStack *state) const
 {
   return false;
 }
 
 bool
-MCMutexLock::enabledInState(const MCStack *state) const
+MCMutexTryLock::coenabledWith(const MCTransition *transition) const
 {
-  return this->mutex->canAcquire(this->getThreadId());
-}
-
-bool
-MCMutexLock::coenabledWith(const MCTransition *transition) const
-{
-  {
-    const MCMutexUnlock *maybeMutexUnlock =
-      dynamic_cast<const MCMutexUnlock *>(transition);
-    if (maybeMutexUnlock) {
-      return *maybeMutexUnlock->mutex != *this->mutex;
-    }
-  }
   return true;
 }
 
 bool
-MCMutexLock::dependentWith(const MCTransition *transition) const
+MCMutexTryLock::dependentWith(const MCTransition *transition) const
 {
   {
     const MCMutexLock *maybeMutexLock =
@@ -176,12 +153,20 @@ MCMutexLock::dependentWith(const MCTransition *transition) const
     }
   }
 
+  {
+    const MCMutexTryLock *maybeMutexTrylock =
+      dynamic_cast<const MCMutexTryLock *>(transition);
+    if (maybeMutexTrylock) {
+      return *maybeMutexTrylock->mutex == *this->mutex;
+    }
+  }
+
   return false;
 }
 
 void
-MCMutexLock::print() const
+MCMutexTryLock::print() const
 {
-  mcprintf("thread %lu: pthread_mutex_lock(mut:%u)\n", this->thread->tid,
+  mcprintf("thread %lu: pthread_mutex_trylock(mut:%u)\n", this->thread->tid,
            countVisibleObjectsOfType(this->mutex->getObjectId()));
 }

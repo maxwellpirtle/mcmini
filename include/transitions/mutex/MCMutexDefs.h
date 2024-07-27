@@ -3,6 +3,7 @@
 
 #include "transitions/mutex/MCMutexInit.h"
 #include "transitions/mutex/MCMutexLock.h"
+#include "transitions/mutex/MCMutexTryLock.h"
 #include "transitions/mutex/MCMutexUnlock.h"
 
-#endif // MC_MCMUTEXDEFS_H
+#endif  // MC_MCMUTEXDEFS_H

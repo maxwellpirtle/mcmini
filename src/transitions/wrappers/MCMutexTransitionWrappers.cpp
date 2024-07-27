@@ -36,6 +36,15 @@ mc_pthread_mutex_lock(pthread_mutex_t *mutex)
 }
 
 int
+mc_pthread_mutex_trylock(pthread_mutex_t *mutex) {
+  auto newlyCreatedMutex = MCMutexShadow(mutex);
+  thread_post_visible_operation_hit<MCMutexShadow>(
+    typeid(MCMutexTryLock), &newlyCreatedMutex);
+  thread_await_scheduler();
+  return __real_pthread_mutex_trylock(mutex);
+}
+
+int
 mc_pthread_mutex_unlock(pthread_mutex_t *mutex)
 {
   // The join handler doesn't care about the other arguments
